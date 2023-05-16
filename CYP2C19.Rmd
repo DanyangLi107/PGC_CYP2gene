@@ -1,89 +1,128 @@
 
 ```{r}
 library(dplyr)
-setwd('/scratch/prj/bioresource/Public/PGx/data')
+
 c19.pos <- read.table('rsid_pos_CYP2C19.txt', header=F) %>% rename(POS=V1)
 c19.rsid <- read.table('rsid_CYP2C19.txt', header=F) %>% rename(RSID=V1) %>% cbind(.,c19.pos)
-vcf<-read.table(gzfile('GLADv2_imputed_rsid_CYP2C19.vcf.gz'), stringsAsFactors = FALSE)[1:3] %>% rename(CHROM=V1,POS=V2,ID=V3)
+
+# load vcf files containing CYP2C19 region
+vcf<-read.table(gzfile('CYP2C19.vcf.gz'), stringsAsFactors = FALSE)[1:3] %>% rename(CHROM=V1,POS=V2,ID=V3)
+
+# check how many CYP2C19 SNPs were covered in phased vcf files
 c19.vcf <- vcf %>% merge(.,c19.rsid, by='POS') 
 ```
-
-# 7 SNPs overlap: rs12248560, rs28399504, rs12769205, rs41291556, rs58973490, rs4244285, rs3758581
-
 
 
 # check which SNPs belong to one star allele in CYP2C19 using CPIC reference table
 ```{r}
-# rs12248560   *17
-# rs12769205   *2 *35
-# rs3758581    *1 
-# rs41291556   *8
-# rs4244285    *2
-# rs58973490   *11
-# rs28399504   *4
-# *2  rs12769205 A>G rs4244285 G>A rs3758581 A>G    No function
-# *4  rs28399504 A>G rs3758581 A>G                  No
-# *8  rs41291556 T>C                                No
-# *11 rs58973490 G>A rs3758581 A>G                  Normal
-# *17 rs12248560 C>T rs3758581 A>G                  Increased
-# *35 rs12769205 A>G rs3758581 A>G                  No (subset of *2)
+ref <- readxl::read_excel('CYP2C19_allele_definition_table.xlsx', sheet=1)
+ref <- ref[,1:ncol(ref)-1]  
+
+c19.pos <- rbind(c('POS'), c19.pos)
+
+ref.pos <- ref %>% 
+    rbind(c19.pos$POS, .) %>% 
+    .[c(1, 6:nrow(.)),] %>% 
+    `colnames<-`(.[1, ]) %>% 
+    .[-c(1:3), ] %>% 
+    rename(allele=POS)
+
+cand.pos <- intersect(as.character(c19.vcf$POS), names(ref.pos))  
+
+# include alleles that do not contain SNPs outside the SNP list, this step could select star allele that do not contain any SNPs in the SNP list 
+allele1 <- ref.pos[apply(ref.pos, 1, function(x) {
+  non_na <- names(ref.pos)[which(!is.na(x))][-1]
+  allele_with_other <- names(ref.pos)[which(x=='M'|x=='Y'|x=='R')]
+  allele_names <- setdiff(non_na, allele_with_other)
+  all_present <- all(allele_names %in% cand.pos)
+  return(all_present)
+}), ] %>% as.data.frame
+
+# extract allele information (position, alternativeSNP ..)
+# info <- ref %>% rbind(c19.pos$POS, .) %>% .[, c(names(.)[1], names(intersect(c19.vcf$POS, .[1,])))] %>% `colnames<-`(.[1, ]) %>% .[-1, ] %>% .[1:5,]
+
+# because all included SNPs have rsid, I change this to colnames
+rsid <- ref %>% 
+    rbind(c19.pos$POS, .) %>% 
+    .[, c(names(.)[1], names(intersect(c19.vcf$POS, .[1,])))] %>% 
+    `colnames<-`(.[6, ]) %>%
+    .[-6, ] %>% 
+    .[7:nrow(.),] %>% 
+    rename(allele=rsID)
+
+# remove alleles that have all NAs in the listed SNPs
+allele2 <- rsid %>% .[rowSums(is.na(.)) != ncol(.)-1, 1]  
+allele.sel <- intersect(allele1$allele, allele2$allele)  
 
 ```
 
 # manually call CYP2C19 from genotype data
 ```{r}
-# only included overlapped snps (7)
-# snps <- c("rs12248560", "rs12769205", "rs3758581","rs41291556", "rs4244285", "rs58973490", "rs28399504")
-
-vcf<-read.table(gzfile('GLADv2_imputed_rsid_CYP2C19.vcf.gz'), stringsAsFactors = FALSE) %>% filter(V2 %in% c19.vcf$POS) %>% merge(c19.vcf[,c('POS','RSID')], ., by.x='POS', by.y='V2')
-colnames(vcf) <- header 
-
-write.table(vcf, 'CYP2C19_select.vcf', quote=F, row.names=F)
-# GLAD_ref GLAD_alt Pharmvar_ref Pharmvar_alt
-# rs12248560    C T     same
-# rs12769205    A G     same
-# rs3758581     A G     same 
-# rs41291556    T C     same
-# rs4244285     G A     same
-# rs58973490    G A     same
-# rs28399504    A G     same
-
-## after finished haplotype and phenotype calling, interestingly, I found all individuals carrying *11 variants (rs58973490) are phased with *2 variants so *11 carriers were replaced by *2 carriers and are not called *11 in the haplotype results.
-
-vcf <- vcf %>% t(.) %>% as.data.frame() %>% .[c(2,5,6,11:dim(.)[1]),]
-colnames(vcf) <- vcf[1,]
-vcf <- vcf[-1,]
+# read files
+vcf<-read.table(gzfile('CYP2C19.vcf.gz'), stringsAsFactors = FALSE) %>% 
+    filter(V2 %in% c19.vcf$POS) %>% 
+    merge(c19.vcf[,c('POS','RSID')], ., by.x='POS', by.y='V2') %>% 
+    t(.) %>% 
+    as.data.frame %>% 
+    .[c(2,5,6,11:nrow(.)),] %>% 
+    `colnames<-`(.[1, ]) %>% 
+    .[-1, ]
+ 
 # only leave genotype from vcf
-vcf <- as.data.frame(apply(vcf, 2, function(x) {do.call(rbind, strsplit(x,':'))[,1]}))
+vcf <- apply(vcf, 2, function(x) {do.call(rbind, strsplit(x,':'))[,1]}) %>% as.data.frame
 
 # separate diplotype to haplotype, the star alleles are ordered from the lowest activity score to the highest
 vcf <- vcf %>% mutate(hap_1='*1', hap_2='*1')
-# because rs3758581 was covered in all cohorts so I don't use if.
-# *2 rs12769205 rs4244285 rs3758581
-vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs12769205, '\\|'))[,1] =='1' & do.call(rbind, strsplit(vcf$rs4244285, '\\|'))[,1] =='1' & do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,1] =='1' & vcf$hap_1 =='*1')] <- '*2'
-vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs12769205, '\\|'))[,2] =='1' & do.call(rbind, strsplit(vcf$rs4244285, '\\|'))[,2] =='1' & do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,2] =='1' & vcf$hap_2 =='*1')]  <- '*2'
 
-# *4 rs28399504 rs3758581 
-vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs28399504, '\\|'))[,1] =='1' & do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,1] =='1' & vcf$hap_1 =='*1')] <- '*4'
-vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs28399504, '\\|'))[,2] =='1' & do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,2] =='1' & vcf$hap_2 =='*1')] <- '*4'
+# *2 rs12769205 rs4244285 rs3758581
+vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs12769205, '\\|'))[,1] =='1' & 
+    do.call(rbind, strsplit(vcf$rs4244285, '\\|'))[,1] =='1' & 
+    do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,1] =='1' & 
+    vcf$hap_1 =='*1')] <- '*2'
+vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs12769205, '\\|'))[,2] =='1' & 
+    do.call(rbind, strsplit(vcf$rs4244285, '\\|'))[,2] =='1' & 
+    do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,2] =='1' & 
+    vcf$hap_2 =='*1')]  <- '*2'
+
+# *3 rs4986893 rs3758581 
+vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs4986893, '\\|'))[,1] =='1' & 
+    do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,1] =='1' & 
+    vcf$hap_1 =='*1')] <- '*3'
+vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs4986893, '\\|'))[,2] =='1' & 
+    do.call(rbind, strsplit  (vcf$rs3758581, '\\|'))[,2] =='0' 
+    & vcf$hap_2 =='*1')] <- '*3'
 
 # *8 rs41291556 
-vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs41291556, '\\|'))[,1] =='1' & vcf$hap_1 =='*1')] <- '*8'
-vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs41291556, '\\|'))[,2] =='1' & vcf$hap_2 =='*1')] <- '*8'
+vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs41291556, '\\|'))[,1] =='1' & 
+    vcf$hap_1 =='*1')] <- '*8'
+vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs41291556, '\\|'))[,2] =='1' & 
+    vcf$hap_2 =='*1')] <- '*8'
 
 # *35 rs12769205 rs3758581
-vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs12769205, '\\|'))[,1] =='1' & do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,1] =='1'& vcf$hap_1 =='*1')] <- '*35'
-vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs12769205, '\\|'))[,2] =='1' & do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,2] =='1'& vcf$hap_2 =='*1')] <- '*35'
+vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs12769205, '\\|'))[,1] =='1' & 
+    do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,1] =='1' & 
+    vcf$hap_1 =='*1')] <- '*35'
+vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs12769205, '\\|'))[,2] =='1' & 
+    do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,2] =='1' & 
+    vcf$hap_2 =='*1')] <- '*35'
 
 # *17 rs12248560 rs3758581
-vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs12248560, '\\|'))[,1] =='1' & do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,1] =='1' & vcf$hap_1 =='*1')] <- '*17'
-vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs12248560, '\\|'))[,2] =='1' & do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,2] =='1' & vcf$hap_2 =='*1')] <- '*17'
+vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs12248560, '\\|'))[,1] =='1' & 
+    do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,1] =='1' & 
+    vcf$hap_1 =='*1')] <- '*17'
+vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs12248560, '\\|'))[,2] =='1' & 
+    do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,2] =='1' & 
+    vcf$hap_2 =='*1')] <- '*17'
 
 # *11 rs58973490 rs3758581
-vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs58973490, '\\|'))[,1] =='1' & do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,1] =='1'& vcf$hap_1 =='*1')] <- '*11'
-vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs58973490, '\\|'))[,2] =='1' & do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,2] =='1'& vcf$hap_2 =='*1')] <- '*11'
+vcf$hap_1[which(do.call(rbind, strsplit(vcf$rs58973490, '\\|'))[,1] =='1' & 
+    do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,1] =='1' & 
+    vcf$hap_1 =='*1')] <- '*11'
+vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs58973490, '\\|'))[,2] =='1' & 
+    do.call(rbind, strsplit(vcf$rs3758581, '\\|'))[,2] =='1'& 
+    vcf$hap_2 =='*1')] <- '*11'
 
-# activity score: this activity score is only used to categorize phenotype easily. it doesn't have any reference support.
+# activity value of each allele 
 vcf <- vcf%>% mutate(as_hap1 = ifelse(
     grepl('^\\*2$|^\\*4$|^\\*8$|^\\*35$', hap_1), 0, ifelse(
         grepl('^\\*17$', hap_1), 1.5, 1
@@ -94,6 +133,7 @@ vcf <- vcf%>% mutate(as_hap2 = ifelse(
     )))
 # activity score
 vcf <- vcf %>% mutate(as=as_hap1 + as_hap2, diplotype = paste0(hap_1, '/', hap_2))
+
 # phenotype
 vcf <- vcf %>% mutate(phenotype = ifelse(
     as>=2.5, 'Ultrarapid', ifelse(
@@ -102,9 +142,6 @@ vcf <- vcf %>% mutate(phenotype = ifelse(
         )
     )))
 vcf <- vcf %>% .[3:dim(vcf)[1],]
-table(vcf$phenotype)
-# Intermediate       Normal         Poor   Ultrarapid 
-#         4585         6901          409         5613
 
 
 # match sample ID
@@ -117,4 +154,9 @@ header <- header[10:length(header)]
 vcf <- vcf %>% tibble::add_column(ID=header, .before='rs12248560')
 
 vcf %>% saveRDS(file='CYP2C19_starallele_call.rds')
+```
+
+
+```{r}
+
 ```
