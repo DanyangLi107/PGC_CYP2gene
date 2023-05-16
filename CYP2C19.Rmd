@@ -2,7 +2,7 @@
 ```{r}
 library(dplyr)
 
-c19.pos <- read.table('rsid_pos_CYP2C19.txt', header=F) %>% rename(POS=V1)
+c19.pos <- read.table('pos_CYP2C19.txt', header=F) %>% rename(POS=V1)
 c19.rsid <- read.table('rsid_CYP2C19.txt', header=F) %>% rename(RSID=V1) %>% cbind(.,c19.pos)
 
 # load vcf files containing CYP2C19 region
@@ -38,10 +38,7 @@ allele1 <- ref.pos[apply(ref.pos, 1, function(x) {
   return(all_present)
 }), ] %>% as.data.frame
 
-# extract allele information (position, alternativeSNP ..)
-# info <- ref %>% rbind(c19.pos$POS, .) %>% .[, c(names(.)[1], names(intersect(c19.vcf$POS, .[1,])))] %>% `colnames<-`(.[1, ]) %>% .[-1, ] %>% .[1:5,]
-
-# because all included SNPs have rsid, I change this to colnames
+# because all included SNPs have rsid, change this to colnames
 rsid <- ref %>% 
     rbind(c19.pos$POS, .) %>% 
     .[, c(names(.)[1], names(intersect(c19.vcf$POS, .[1,])))] %>% 
@@ -62,7 +59,7 @@ allele.sel <- intersect(allele1$allele, allele2$allele)
 vcf<-read.table(gzfile('CYP2C19.vcf.gz'), stringsAsFactors = FALSE) %>% 
     filter(V2 %in% c19.vcf$POS) %>% 
     merge(c19.vcf[,c('POS','RSID')], ., by.x='POS', by.y='V2') %>% 
-    t(.) %>% 
+    t %>% 
     as.data.frame %>% 
     .[c(2,5,6,11:nrow(.)),] %>% 
     `colnames<-`(.[1, ]) %>% 
@@ -141,6 +138,6 @@ vcf <- vcf %>% mutate(phenotype = ifelse(
             as<=1.5 & as>0, 'Intermediate', 'Normal'
         )
     )))
-vcf <- vcf %>% .[3:dim(vcf)[1],]
+vcf <- vcf %>% .[3:nrow(vcf),]
 
 ```
