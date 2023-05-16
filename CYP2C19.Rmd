@@ -126,13 +126,13 @@ vcf$hap_2[which(do.call(rbind, strsplit(vcf$rs58973490, '\\|'))[,2] =='1' &
 vcf <- vcf%>% mutate(as_hap1 = ifelse(
     grepl('^\\*2$|^\\*4$|^\\*8$|^\\*35$', hap_1), 0, ifelse(
         grepl('^\\*17$', hap_1), 1.5, 1
-    )))
-vcf <- vcf%>% mutate(as_hap2 = ifelse(
+    )), as_hap2 = ifelse(
     grepl('^\\*2$|^\\*4$|^\\*8$|^\\*35$', hap_2), 0, ifelse(
         grepl('^\\*17$', hap_2), 1.5, 1
-    )))
-# activity score
-vcf <- vcf %>% mutate(as=as_hap1 + as_hap2, diplotype = paste0(hap_1, '/', hap_2))
+    )),
+    # activity score
+    as = as_hap1 + as_hap2, diplotype = paste0(hap_1, '/', hap_2
+    ))
 
 # phenotype
 vcf <- vcf %>% mutate(phenotype = ifelse(
@@ -142,21 +142,5 @@ vcf <- vcf %>% mutate(phenotype = ifelse(
         )
     )))
 vcf <- vcf %>% .[3:dim(vcf)[1],]
-
-
-# match sample ID
-# get header from vcf
-system(paste0("zcat /scratch/prj/bioresource/Public/GLADv2/v2_imputed_data/vcf/GLAD_rsid_chr10_maf1_R2_3.vcf.gz | awk '$1 ~ /^#CHROM/ {print NR}'")) # 25
-
-header <- readLines(pipe(paste0("zcat /scratch/prj/bioresource/Public/GLADv2/v2_imputed_data/vcf/GLAD_rsid_chr10_maf1_R2_3.vcf.gz | head -n 25 | tail -n 1"))) 
-header <-unlist(strsplit(header[length(header)],"\t")) 
-header <- header[10:length(header)]
-vcf <- vcf %>% tibble::add_column(ID=header, .before='rs12248560')
-
-vcf %>% saveRDS(file='CYP2C19_starallele_call.rds')
-```
-
-
-```{r}
 
 ```
