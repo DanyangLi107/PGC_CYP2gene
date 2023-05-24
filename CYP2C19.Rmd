@@ -15,21 +15,19 @@ c19.vcf <- vcf %>% merge(.,c19.rsid, by='POS')
 
 # check which SNPs belong to one star allele in CYP2C19 using CPIC reference table
 ```{r}
-ref <- readxl::read_excel('CYP2C19_allele_definition_table.xlsx', sheet=1)
-ref <- ref[,1:ncol(ref)-1]  
+ref <- readxl::read_excel('CYP2C19_allele_definition_table.xlsx', sheet=1) %>% .[,1:ncol(.)-1]  
 
 c19.pos <- rbind(c('POS'), c19.pos)
 
 ref.pos <- ref %>% 
     rbind(c19.pos$POS, .) %>% 
-    .[c(1, 6:nrow(.)),] %>% 
     `colnames<-`(.[1, ]) %>% 
-    .[-c(1:3), ] %>% 
+    .[8:nrow(.),] %>% 
     rename(allele=POS)
 
 cand.pos <- intersect(as.character(c19.vcf$POS), names(ref.pos))  
 
-# include alleles that do not contain SNPs outside the SNP list, this step could select star allele that do not contain any SNPs in the SNP list 
+# include alleles that only contain SNPs in the candidate SNP list
 allele1 <- ref.pos[apply(ref.pos, 1, function(x) {
   non_na <- names(ref.pos)[which(!is.na(x))][-1]
   allele_with_other <- names(ref.pos)[which(x=='M'|x=='Y'|x=='R')]
@@ -38,13 +36,12 @@ allele1 <- ref.pos[apply(ref.pos, 1, function(x) {
   return(all_present)
 }), ] %>% as.data.frame
 
-# because all included SNPs have rsid, change this to colnames
+# select SNPs shown in the vcf file from the reference, because all included SNPs have rsid, change this to colnames
 rsid <- ref %>% 
     rbind(c19.pos$POS, .) %>% 
     .[, c(names(.)[1], names(intersect(c19.vcf$POS, .[1,])))] %>% 
     `colnames<-`(.[6, ]) %>%
-    .[-6, ] %>% 
-    .[7:nrow(.),] %>% 
+    .[8:nrow(.),] %>% 
     rename(allele=rsID)
 
 # remove alleles that have all NAs in the listed SNPs

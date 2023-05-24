@@ -12,20 +12,18 @@ d6.vcf <- vcf %>% merge(.,d6.pos, by='POS')
 
 # check which SNPs belong to one star allele in CYP2C19 using CPIC reference table
 ```{r}
-ref <- readxl::read_excel('CYP2D6_allele_definition_table.xlsx', sheet=1)
-ref <- ref[,1:ncol(ref)-1]  
+ref <- readxl::read_excel('CYP2D6_allele_definition_table.xlsx', sheet=1) %>% .[,1:ncol(.)-1]   
 
 d6.pos <- rbind(c('POS'), d6.pos)
 
 ref.pos <- ref %>% 
-    rbind(d6.pos$POS, .) %>% 
-    .[c(1, 6:nrow(.)),] %>% 
+    rbind(d6.pos$POS, .) %>%  
     `colnames<-`(.[1, ]) %>% 
-    .[-c(1:3), ] %>% 
+    .[8:nrow(.),] %>% 
     rename(allele=POS)
 
 cand.pos <- intersect(as.character(d6.vcf$POS), names(ref.pos))
-# include alleles that do not contain SNPs outside the SNP list, this step could select star allele that do not contain any SNPs in the SNP list (such as *13, *5 so need to remove these snps in later steps)
+# include alleles that only contain SNPs in the candidate SNP list, this step could select star allele that do not contain any SNPs in the SNP list (such as *13, *5 so need to remove these snps in later steps)
 allele1 <- ref.pos[apply(ref.pos, 1, function(x) {
   non_na <- names(ref.pos)[which(!is.na(x))][-1]
   allele_with_other <- names(ref.pos)[which(x=='S'|x=='Y'|x=='M'|x=='R'|x=='K'|x=='W')]
@@ -34,12 +32,11 @@ allele1 <- ref.pos[apply(ref.pos, 1, function(x) {
   return(all_present)
 }), ] %>% as.data.frame
 
-# because all included SNPs have rsid, change this to colnames
+# select SNPs shown in the vcf file from the reference, because all included SNPs have rsid, change this to colnames
 rsid <- ref %>% rbind(d6.pos$POS, .) %>% 
     .[, c(names(.)[1], names(intersect(d6.vcf$POS, .[1,])))] %>% 
     `colnames<-`(.[6, ]) %>% 
-    .[-6, ] %>% 
-    .[7:nrow(.),] %>% 
+    .[8:nrow(.),] %>% 
     rename(allele=rsID)
 
 # remove alleles that have all NAs in the listed SNPs
@@ -49,9 +46,8 @@ allele.sel <- intersect(allele1$allele, allele2$allele)
 # check functions of selected alleles
 func <- readxl::read_excel("CYP2D6_allele_functionality_reference.xlsx", sheet=1)
 func <- func %>% 
-    .[,1:ncol(.)-1] %>% 
     `colnames<-`(.[1, ]) %>% 
-    .[-1, ] %>% 
+    .[-1,1:ncol(.)-1] %>% 
     subset(`Allele/cDNA/rsID`%in% allele.sel)
 func$`Activity Value (Optional)`
 func$`Allele Clinical Functional Status (Required)`
@@ -65,8 +61,7 @@ info <- ref %>%
     rbind(d6.pos$POS, .) %>% 
     .[, c(names(.)[1], names(intersect(d6.vcf$POS, .[1,])))] %>% 
     `colnames<-`(.[1, ]) %>% 
-    .[-1, ] %>% 
-    .[1:5,]
+    .[2:6,]
 d6.vcf <- info[5,-1] %>% 
     t %>% 
     as.data.frame %>%  
@@ -84,6 +79,7 @@ vcf<-read.table(gzfile('CYP2D6.vcf.gz'), stringsAsFactors = FALSE) %>%
 
 # only leave genotype from vcf
 vcf <- apply(vcf, 2, function(x) {do.call(rbind, strsplit(x,':'))[,1]}) %>% as.data.frame
+
 # separate diplotype to haplotype, the star alleles are ordered from the lowest activity score to the highest
 vcf <- vcf %>% mutate(hap_1='*1', hap_2='*1')
 
