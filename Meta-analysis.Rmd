@@ -1,0 +1,80 @@
+
+# Association and effect size 
+```{r}
+library(dplyr)
+library(parameters)
+library(emmeans)
+
+assoc_rem <- function(dat) {
+    # logistic regression
+    logis <- glm(rem ~ phenotype_c19 + phenotype_d6 + age + sex + bl_score, data=dat, family='binomial') 
+    logis.df <- logis %>% 
+        parameters %>% 
+        .[2:6,c(1:3,7,9)] %>% 
+        mutate(OR=exp(Coefficient))
+    return(logis.df)
+}
+
+assoc_perc <- function(dat) {
+    # linear regression
+    perc <- lm(z_perc_improv ~ phenotype_c19 + phenotype_d6, data=dat) # z_perc_improv has been adjusted by age and sex
+    # cohen'd
+    cohend.c19 <- emmeans(perc, 'phenotype_c19') %>%
+        eff_size(., sigma = sigma(perc), edf = df.residual(perc)) %>% 
+        summary %>% 
+        .[1:3,c('effect.size','SE')] 
+    cohend.d6 <- emmeans(perc, 'phenotype_d6') %>% 
+        eff_size(., sigma = sigma(perc), edf = df.residual(perc)) %>% 
+        summary %>% 
+        .[1:2,c('effect.size','SE')] 
+    perc.df <- perc %>% 
+        parameters %>% 
+        .[2:6,c(1:3,7,9)] %>%
+        mutate(cohend=-c(cohend.c19$effect.size, cohend.d6$effect.size), 
+        cohendse=c(cohend.c19$SE, cohend.d6$SE))
+    return(perc.df)
+}
+
+```
+
+# Meta-analysis
+```{r}
+# meta-analysis of remission
+meta_rem <- function(df, coef, se, Study, Ancestry) {
+    m.rem <- meta::metagen(TE = coef,
+                 seTE = se,
+                 studlab = Study,
+                 data = df,
+                 sm = "OR",
+                 fixed = FALSE,
+                 random = TRUE,
+                 method.tau = "PM", 
+                 hakn = FALSE,
+                 title = paste0("Remission of ", Study))
+    # subgroup meta-analysis
+    m.rem.sub <- meta::update.meta(m.rem, 
+                subgroup = Ancestry, 
+                tau.common = TRUE)
+    return(list(m.rem, m.rem.sub))
+}
+
+# meta-analysis of percentage improvement
+meta_perc <- function(df, cohend, cohend_se, Study, Ancestry) {
+    m.imp <- meta::metagen(TE = cohend,
+                 seTE = cohend_se,
+                 studlab = Study,
+                 data = df, 
+                 sm = "SMD",
+                 fixed = FALSE,
+                 random = TRUE,
+                 method.tau = "REML",
+                 hakn = FALSE,
+                 title = paste0("Percentage improvement of ", Study))
+    # subgroup meta-analysis
+    m.imp.sub <- meta::update.meta(m.imp, 
+                subgroup = Ancestry, 
+                tau.common = TRUE)
+    return(list(m.imp, m.imp.sub))
+}
+
+```
