@@ -4,6 +4,7 @@
 library(dplyr)
 library(parameters)
 library(emmeans)
+library(meta)
 
 assoc_rem <- function(dat) {
     # logistic regression
@@ -41,7 +42,7 @@ assoc_perc <- function(dat) {
 ```{r}
 # meta-analysis of remission
 meta_rem <- function(df, coef, se, Study, Ancestry) {
-    m.rem <- meta::metagen(TE = coef,
+    m.rem <- metagen(TE = coef,
                  seTE = se,
                  studlab = Study,
                  data = df,
@@ -52,7 +53,7 @@ meta_rem <- function(df, coef, se, Study, Ancestry) {
                  hakn = FALSE,
                  title = paste0("Remission of ", Study))
     # subgroup meta-analysis
-    m.rem.sub <- meta::update.meta(m.rem, 
+    m.rem.sub <- update.meta(m.rem, 
                 subgroup = Ancestry, 
                 tau.common = TRUE)
     return(list(m.rem, m.rem.sub))
@@ -60,7 +61,7 @@ meta_rem <- function(df, coef, se, Study, Ancestry) {
 
 # meta-analysis of percentage improvement
 meta_perc <- function(df, cohend, cohend_se, Study, Ancestry) {
-    m.imp <- meta::metagen(TE = cohend,
+    m.imp <- metagen(TE = cohend,
                  seTE = cohend_se,
                  studlab = Study,
                  data = df, 
@@ -71,7 +72,7 @@ meta_perc <- function(df, cohend, cohend_se, Study, Ancestry) {
                  hakn = FALSE,
                  title = paste0("Percentage improvement of ", Study))
     # subgroup meta-analysis
-    m.imp.sub <- meta::update.meta(m.imp, 
+    m.imp.sub <- update.meta(m.imp, 
                 subgroup = Ancestry, 
                 tau.common = TRUE)
     return(list(m.imp, m.imp.sub))
