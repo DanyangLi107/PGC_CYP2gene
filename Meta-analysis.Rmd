@@ -51,7 +51,7 @@ meta_rem <- function(df, coef, se, Study, Ancestry) {
                  random = TRUE,
                  method.tau = "PM", 
                  hakn = FALSE,
-                 title = paste0("Remission of ", Study))
+                 title = "Remission")
     # subgroup meta-analysis
     m.rem.sub <- update.meta(m.rem, 
                 subgroup = Ancestry, 
@@ -70,7 +70,7 @@ meta_perc <- function(df, cohend, cohend_se, Study, Ancestry) {
                  random = TRUE,
                  method.tau = "REML",
                  hakn = FALSE,
-                 title = paste0("Percentage improvement of ", Study))
+                 title = "Percentage improvement")
     # subgroup meta-analysis
     m.imp.sub <- update.meta(m.imp, 
                 subgroup = Ancestry, 
